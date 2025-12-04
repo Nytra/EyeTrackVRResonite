@@ -10,15 +10,29 @@ namespace EyeTrackVRResonite
     public class EyeTrackVR : ResoniteMod
     {
         public override string Name => "EyeTrackVRResonite";
-        public override string Author => "PLYSHKA + dfgHiatus";
-        public override string Version => "2.0.0";
-        public override string Link => "https://github.com/Meister1593/EyeTrackVRResonite";
+        public override string Author => "PLYSHKA + dfgHiatus + Nytra";
+        public override string Version => "3.0.0";
+        public override string Link => "https://github.com/Nytra/EyeTrackVRResonite";
 
         public override void OnEngineInit()
         {
             _config = GetConfiguration();
             new Harmony("net.plyshka.EyeTrackVRResonite").PatchAll();
             Engine.Current.OnShutdown += ETVROSC.Teardown;
+            Engine.Current.RunPostInit(() =>
+            {
+                try
+                {
+                    _etvr = new ETVROSC(_config.GetValue(OscPort));
+                    var gen = new EyeTrackVRInterface();
+                    Engine.Current.InputInterface.RegisterInputDriver(gen);
+                }
+                catch (Exception e)
+                {
+                    Warn("Module failed to initialize.");
+                    Warn(e.ToString());
+                }
+            });
         }
 
         private static ETVROSC _etvr;
@@ -58,26 +72,6 @@ namespace EyeTrackVRResonite
             dvdriver.DriveTarget.Target = dv.Value;
         }
 
-        [HarmonyPatch(typeof(InputInterface), MethodType.Constructor)]
-        [HarmonyPatch(new[] { typeof(Engine) })]
-        public class InputInterfaceCtorPatch
-        {
-            public static void Postfix(InputInterface __instance)
-            {
-                try
-                {
-                    _etvr = new ETVROSC(_config.GetValue(OscPort));
-                    var gen = new EyeTrackVRInterface();
-                    __instance.RegisterInputDriver(gen);
-                }
-                catch (Exception e)
-                {
-                    Warn("Module failed to initialize.");
-                    Warn(e.ToString());
-                }
-            }
-        }
-
         [HarmonyPatch(typeof(UserRoot), "OnStart")]
         class VRCFTReceiverPatch
         {
@@ -110,6 +104,7 @@ namespace EyeTrackVRResonite
         private class EyeTrackVRInterface : IInputDriver
         {
             private Eyes _eyes;
+            private Mouth _mouth;
             private const float DefaultPupilSize = 0.0035f;
             public int UpdateOrder => 100;
             public static Dictionary<World, Dictionary<string, ValueStream<float>>> VRCFTDictionary = new();
@@ -129,11 +124,15 @@ namespace EyeTrackVRResonite
                 ["MouthX"] = new[] { MkParam("MouthRight", 0, 1), MkParam("MouthLeft", 0, -1) },
                 ["JawX"] = new[] { MkParam("JawRight", 0, 1), MkParam("JawLeft", 0, -1) },
                 ["JawOpen"] = new[] { MkParam("JawOpen") },
+                ["JawForward"] = new[] { MkParam("JawForward")},
                 ["CheekPuffLeft"] = new[] { MkParam("CheekPuffLeft") },
                 ["CheekPuffRight"] = new[] { MkParam("CheekPuffRight") },
                 ["LipPucker"] = new[] { MkParam("LipPucker") },
                 ["LipFunnelUpper"] = new[] { MkParam("LipFunnelUpper") },
                 ["LipFunnelLower"] = new[] { MkParam("LipFunnelLower") },
+                ["TongueX"] = new[] { MkParam("TongueRight", 0, 1), MkParam("TongueLeft", 0, -1)},
+                ["TongueY"] = new[] { MkParam("TongueUp", 0, 1), MkParam("TongueDown", 0, -1)},
+                ["TongueOut"] = new[] { MkParam("TongueOut")}
             };
 
             public void CollectDeviceInfos(DataTreeList list)
@@ -143,11 +142,30 @@ namespace EyeTrackVRResonite
                 eyeDataTreeDictionary.Add("Type", "Eye Tracking");
                 eyeDataTreeDictionary.Add("Model", "ETVR Module");
                 list.Add(eyeDataTreeDictionary);
+
+                DataTreeDictionary dict2 = new DataTreeDictionary();
+                dict2.Add("EyeTrackVR", "EyeTrackVR Mouth Tracking");
+                dict2.Add("Type", "Lip Tracking");
+                dict2.Add("Model", "ETVR Module");
+                list.Add(dict2);
             }
 
             public void RegisterInputs(InputInterface inputInterface)
             {
-                _eyes = new Eyes(inputInterface, "EyeTrackVR Tracking", true);
+                _eyes = new Eyes(inputInterface, "EyeTrackVR Eye Tracking", true);
+                _mouth = new Mouth(inputInterface, "EyeTrackVR Mouth Tracking", new MouthParameterGroup[]
+                {
+                    MouthParameterGroup.JawPose,
+                    MouthParameterGroup.JawOpen,
+                    MouthParameterGroup.TonguePose,
+                    MouthParameterGroup.LipRaise,
+                    MouthParameterGroup.LipHorizontal,
+                    MouthParameterGroup.SmileFrown,
+                    MouthParameterGroup.MouthPout,
+                    MouthParameterGroup.LipOverturn,
+                    MouthParameterGroup.LipOverUnder,
+                    MouthParameterGroup.CheekPuffSuck
+                });
             }
 
             public void UpdateInputs(float deltaTime)
@@ -245,6 +263,14 @@ namespace EyeTrackVRResonite
                 _eyes.ConvergenceDistance = 0f;
                 _eyes.Timestamp += deltaTime;
                 _eyes.FinishUpdate();
+
+                _mouth.IsTracking = _etvr.LastUpdate > DateTime.Now.AddSeconds(-5);
+                _mouth.IsDeviceActive = Engine.Current.InputInterface.VR_Active;
+                _mouth.Jaw = new float3(Parameter("JawX"), 0, Parameter("JawForward"));
+                _mouth.JawOpen = Parameter("JawOpen");
+                _mouth.Tongue = new float3(Parameter("TongueX"), Parameter("TongueY"), Parameter("TongueOut"));
+                _mouth.MouthLeftSmileFrown = Parameter("SmileSadLeft");
+                _mouth.MouthRightSmileFrown = Parameter("SmileSadRight");
             }
 
             private float Parameter(string key)
