@@ -130,9 +130,9 @@ namespace EyeTrackVRResonite
                 ["LipPucker"] = new[] { MkParam("LipPucker") },
                 ["LipFunnelUpper"] = new[] { MkParam("LipFunnelUpper") },
                 ["LipFunnelLower"] = new[] { MkParam("LipFunnelLower") },
-                ["TongueX"] = new[] { MkParam("TongueRight", 0, 1), MkParam("TongueLeft", 0, -1)},
-                ["TongueY"] = new[] { MkParam("TongueUp", 0, 1), MkParam("TongueDown", 0, -1)},
-                ["TongueOut"] = new[] { MkParam("TongueOut")}
+                ["TongueX"] = new[] { MkParam("TongueRight", 0, 1), MkParam("TongueLeft", 0, -1) },
+                ["TongueY"] = new[] { MkParam("TongueUp", 0, 1), MkParam("TongueDown", 0, -1) },
+                ["TongueOut"] = new[] { MkParam("TongueOut") }
             };
 
             public void CollectDeviceInfos(DataTreeList list)
@@ -144,7 +144,7 @@ namespace EyeTrackVRResonite
                 list.Add(eyeDataTreeDictionary);
 
                 DataTreeDictionary dict2 = new DataTreeDictionary();
-                dict2.Add("EyeTrackVR", "EyeTrackVR Mouth Tracking");
+                dict2.Add("Name", "EyeTrackVR Mouth Tracking");
                 dict2.Add("Type", "Lip Tracking");
                 dict2.Add("Model", "ETVR Module");
                 list.Add(dict2);
@@ -260,9 +260,15 @@ namespace EyeTrackVRResonite
 
                 _mouth.IsTracking = _etvr.LastUpdate > DateTime.Now.AddSeconds(-5);
                 _mouth.IsDeviceActive = Engine.Current.InputInterface.VR_Active;
+
+                var jawX = Parameter("JawRight") - Parameter("JawLeft");
                 _mouth.Jaw = new float3(Parameter("JawX"), 0, Parameter("JawForward"));
                 _mouth.JawOpen = Parameter("JawOpen");
-                _mouth.Tongue = new float3(Parameter("TongueX"), Parameter("TongueY"), Parameter("TongueOut"));
+
+                var tongueX = Parameter("TongueRight") - Parameter("TongueLeft");
+                var tongueY = Parameter("TongueUp") - Parameter("TongueDown");
+                _mouth.Tongue = new float3(tongueX, tongueY, Parameter("TongueOut"));
+
                 _mouth.MouthLeftSmileFrown = Parameter("SmileSadLeft");
                 _mouth.MouthRightSmileFrown = Parameter("SmileSadRight");
             }
