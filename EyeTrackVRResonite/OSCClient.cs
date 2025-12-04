@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Elements.Core;
 using OscCore;
@@ -14,14 +15,13 @@ namespace EyeTrackVRResonite
 
     public class ETVROSC
     {
-        private static bool _oscSocketState;
-        public readonly object Lock = new();
         public readonly Dictionary<string, float> Parameters = new();
         public readonly float2[] EyeLeftRightEuler = new float2[2];
         public DateTime LastUpdate = DateTime.MinValue;
 
         private static UdpClient? _receiver;
-        private static Task? _task;
+
+        private static CancellationTokenSource _cancellation = new();
 
         private const int DefaultPort = 9000;
 
@@ -35,19 +35,24 @@ namespace EyeTrackVRResonite
             IPAddress.TryParse("127.0.0.1", out var candidate);
 
             _receiver = port.HasValue
-                ? new UdpClient(new IPEndPoint(candidate, port.Value))
-                : new UdpClient(new IPEndPoint(candidate, DefaultPort));
+                ? new UdpClient(new IPEndPoint(candidate!, port.Value))
+                : new UdpClient(new IPEndPoint(candidate!, DefaultPort));
 
-            _oscSocketState = true;
-            _task = Task.Run(ListenLoop);
+            Task.Run(ListenLoop);
         }
 
         private async void ListenLoop()
         {
             UniLog.Log("Started EyeTrackVR loop");
-            while (_oscSocketState)
+            while (!_cancellation.IsCancellationRequested)
             {
-                var result = await _receiver.ReceiveAsync();
+                UdpReceiveResult result = default;
+                try
+                {
+                    result = await _receiver!.ReceiveAsync(_cancellation.Token);
+                }
+                catch (OperationCanceledException) { }
+                if (_cancellation.IsCancellationRequested) break;
                 var bytes = new System.ArraySegment<byte>(result.Buffer, 0, result.Buffer.Length);
                 if (IsBundle(bytes))
                 {
@@ -61,12 +66,14 @@ namespace EyeTrackVRResonite
                     ProcessOscMessage(message);
                 }
             }
+            _receiver!.Close();
+            UniLog.Log("EyeTrackVR loop ended");
         }
 
         private const string PARAM_PREFIX = "/avatar/parameters/FT/v2/";
         private void ProcessOscMessage(OscMessageRaw message)
         {
-
+            //UniLog.Log($"OSC message received. Address: {message.Address}");
             if (message.Address == "/tracking/eye/LeftRightPitchYaw")
             {
                 var arg0 = message[0];
@@ -87,16 +94,10 @@ namespace EyeTrackVRResonite
             switch (arg.Type)
             {
                 case (OscToken.Float):
-                    lock (Lock)
-                    {
-                        Parameters[address] = message.ReadFloat(ref arg);
-                    }
+                    Parameters[address] = message.ReadFloat(ref arg);
                     break;
                 case (OscToken.Int):
-                    lock (Lock)
-                    {
-                        Parameters[address] = message.ReadInt(ref arg);
-                    }
+                    Parameters[address] = message.ReadInt(ref arg);
                     break;
                 default:
                     break;
@@ -125,10 +126,7 @@ namespace EyeTrackVRResonite
         public static void Teardown()
         {
             UniLog.Log("EyeTrackVR teardown called");
-            _oscSocketState = false;
-            _receiver.Close();
-            _task.Wait();
-            UniLog.Log("EyeTrackVR teardown completed");
+            _cancellation.Cancel();
         }
     }
 }

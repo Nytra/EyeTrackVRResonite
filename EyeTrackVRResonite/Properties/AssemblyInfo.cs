@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("EyeTrackVRResonite")]
-[assembly: AssemblyDescription("A EyeTrackVR integration for Resonite.")]
+[assembly: AssemblyDescription("Linux face tracking integration for Resonite via oscavmgr.")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Meister1593 Labs + Hiatus Labs (og) + Nytra")]
+[assembly: AssemblyCompany("Meister1593 Labs + Hiatus Labs (og) + galister + Artefact2 + Nytra")]
 [assembly: AssemblyProduct("EyeTrackVRResonite")]
-[assembly: AssemblyCopyright("Copyright © 2023")]
+[assembly: AssemblyCopyright("Copyright © 2025")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -31,5 +31,5 @@ using System.Runtime.InteropServices;
 // You can specify all the values or you can default the Build and Revision Numbers
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("3.0.1.0")]
-[assembly: AssemblyFileVersion("3.0.1.0")]
+[assembly: AssemblyVersion("3.1.0.0")]
+[assembly: AssemblyFileVersion("3.1.0.0")]

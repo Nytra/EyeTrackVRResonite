@@ -10,20 +10,20 @@ namespace EyeTrackVRResonite
     public class EyeTrackVR : ResoniteMod
     {
         public override string Name => "EyeTrackVRResonite";
-        public override string Author => "PLYSHKA + dfgHiatus + Nytra";
-        public override string Version => "3.0.1";
-        public override string Link => "https://github.com/galister/EyeTrackVRResonite";
+        public override string Author => "PLYSHKA + dfgHiatus + galister + Artefact2 + Nytra";
+        public override string Version => "3.1.0";
+        public override string Link => "https://github.com/Nytra/EyeTrackVRResonite";
 
         public override void OnEngineInit()
         {
             _config = GetConfiguration();
-            new Harmony("net.plyshka.EyeTrackVRResonite").PatchAll();
+            new Harmony("owo.Nytra.EyeTrackVRResonite").PatchAll();
             Engine.Current.OnShutdown += ETVROSC.Teardown;
             Engine.Current.RunPostInit(() =>
             {
                 try
                 {
-                    _etvr = new ETVROSC(_config.GetValue(OscPort));
+                    _etvr = new ETVROSC(_config?.GetValue(OscPort));
                     var gen = new EyeTrackVRInterface();
                     Engine.Current.InputInterface.RegisterInputDriver(gen);
                 }
@@ -35,17 +35,11 @@ namespace EyeTrackVRResonite
             });
         }
 
-        private static ETVROSC _etvr;
-        private static ModConfiguration _config;
+        private static ETVROSC? _etvr;
+        private static ModConfiguration? _config;
 
         [AutoRegisterConfigKey]
-        private static readonly ModConfigurationKey<bool> ModEnabled = new("enabled", "Mod Enabled", () => true);
-
-        [AutoRegisterConfigKey]
-        private static readonly ModConfigurationKey<float> Alpha = new("alpha", "Eye Swing Multiplier X", () => 1.0f);
-
-        [AutoRegisterConfigKey]
-        private static readonly ModConfigurationKey<float> Beta = new("beta", "Eye Swing Multiplier Y", () => 1.0f);
+        private static readonly ModConfigurationKey<bool> CreateDynVars = new("CreateDynVars", "Create dynamic variables", () => false);
 
         [AutoRegisterConfigKey]
         private static readonly ModConfigurationKey<int> OscPort = new("osc_port", "EyeTrackVR OSC port", () => 9000);
@@ -55,9 +49,10 @@ namespace EyeTrackVRResonite
             return world.LocalUser.GetStreamOrAdd<ValueStream<float>>(parameter, stream =>
             {
                 stream.Name = parameter;
-                stream.SetUpdatePeriod(0, 0);
+                stream.SetUpdatePeriod(4, 0);
+                stream.SetInterpolation();
                 stream.Encoding = ValueEncoding.Quantized;
-                stream.FullFrameBits = 10;
+                stream.FullFrameBits = 8;
                 stream.FullFrameMin = -1;
                 stream.FullFrameMax = 1;
             });
@@ -79,61 +74,58 @@ namespace EyeTrackVRResonite
             {
                 if (!__instance.ActiveUser.IsLocalUser) return;
 
+                if (!_config!.GetValue(CreateDynVars)) return;
+
                 var dvslot = __instance.Slot.FindChildOrAdd("VRCFTReceiver", true);
 
-                if (!EyeTrackVRInterface.VRCFTDictionary.TryGetValue(__instance.World, out var lookup))
+                if (!EyeTrackVRInterface.Lookups.TryGetValue(__instance.World, out var lookup))
                 {
                     lookup = new();
-                    EyeTrackVRInterface.VRCFTDictionary[__instance.World] = lookup;
+                    EyeTrackVRInterface.Lookups[__instance.World] = lookup;
                 }
 
-                foreach (var transofrmers in EyeTrackVRInterface.FaceTrackParams.Values)
+                foreach (var key in EyeTrackVRInterface.FaceTrackParams)
                 {
-                    foreach (var transformer in transofrmers)
-                    {
-                        var pair = transformer.Invoke(0);
-
-                        var stream = CreateStream(__instance.World, pair.Key);
-                        CreateVariable(dvslot, pair.Key, stream);
-                        lookup[pair.Key] = stream;
-                    }
+                    var stream = CreateStream(__instance.World, key);
+                    CreateVariable(dvslot, key, stream);
+                    lookup[key] = stream;
                 }
             }
         }
 
         private class EyeTrackVRInterface : IInputDriver
         {
-            private Eyes _eyes;
-            private Mouth _mouth;
+            private Eyes? _eyes;
+            private Mouth? _mouth;
             private const float DefaultPupilSize = 0.0035f;
             public int UpdateOrder => 100;
-            public static Dictionary<World, Dictionary<string, ValueStream<float>>> VRCFTDictionary = new();
-            private List<KeyValuePair<string, float>> _etvrParameters = new();
 
-            public static readonly Dictionary<string, Func<float, KeyValuePair<string, float>>[]> FaceTrackParams = new()
-            {
-                ["SmileSadLeft"] = new[] { MkParam("SmileLeft", 0, 3), MkParam("SadLeft", 0, -3) },
-                ["SmileSadRight"] = new[] { MkParam("SmileRight", 0, 3), MkParam("SadRight", 0, -3) },
-                ["BrowExpressionLeft"] = new[] { MkParam("BrowUpLeft", 0, 1), MkParam("BrowDownLeft", 0, -1) },
-                ["BrowExpressionRight"] = new[] { MkParam("BrowUpRight", 0, 1), MkParam("BrowDownRight", 0, -1) },
-                ["MouthStretchTightenLeft"] = new[] { MkParam("MouthTightenLeft", 1, -2) },
-                ["MouthStretchTightenRight"] = new[] { MkParam("MouthTightenRight", 1, -2) },
-                ["MouthClosed"] = new[] { MkParam("MouthClosed") },
-                ["MouthUpperUp"] = new[] { MkParam("MouthUpperUp") },
-                ["MouthLowerDown"] = new[] { MkParam("MouthLowerDown") },
-                ["MouthX"] = new[] { MkParam("MouthRight", 0, 1), MkParam("MouthLeft", 0, -1) },
-                ["JawX"] = new[] { MkParam("JawRight", 0, 1), MkParam("JawLeft", 0, -1) },
-                ["JawOpen"] = new[] { MkParam("JawOpen") },
-                ["JawForward"] = new[] { MkParam("JawForward")},
-                ["CheekPuffLeft"] = new[] { MkParam("CheekPuffLeft") },
-                ["CheekPuffRight"] = new[] { MkParam("CheekPuffRight") },
-                ["LipPucker"] = new[] { MkParam("LipPucker") },
-                ["LipFunnelUpper"] = new[] { MkParam("LipFunnelUpper") },
-                ["LipFunnelLower"] = new[] { MkParam("LipFunnelLower") },
-                ["TongueX"] = new[] { MkParam("TongueRight", 0, 1), MkParam("TongueLeft", 0, -1) },
-                ["TongueY"] = new[] { MkParam("TongueUp", 0, 1), MkParam("TongueDown", 0, -1) },
-                ["TongueOut"] = new[] { MkParam("TongueOut") }
-            };
+            public static Dictionary<World, Dictionary<string, ValueStream<float>?>> Lookups = new();
+
+            public static HashSet<string> FaceTrackParams =
+            [
+                "SmileSadLeft",
+                "SmileSadRight",
+                "BrowExpressionLeft",
+                "BrowExpressionRight",
+                "MouthStretchTightenLeft",
+                "MouthStretchTightenRight",
+                "MouthClosed",
+                "MouthUpperUp",
+                "MouthLowerDown",
+                "MouthX",
+                "JawX",
+                "JawOpen",
+                "CheekPuffLeft",
+                "CheekPuffRight",
+                "LipPucker",
+                "LipFunnelUpper",
+                "LipFunnelLower",
+                "EyeLidLeft",
+                "EyeLidRight",
+                "EyeSquintLeft",
+                "EyeSquintRight"
+            ];
 
             public void CollectDeviceInfos(DataTreeList list)
             {
@@ -153,70 +145,70 @@ namespace EyeTrackVRResonite
             public void RegisterInputs(InputInterface inputInterface)
             {
                 _eyes = new Eyes(inputInterface, "EyeTrackVR Eye Tracking", true);
-                _mouth = new Mouth(inputInterface, "EyeTrackVR Mouth Tracking", new MouthParameterGroup[]
-                {
+                _mouth = new Mouth(inputInterface, "EyeTrackVR Mouth Tracking",
+                [
                     MouthParameterGroup.JawPose,
                     MouthParameterGroup.JawOpen,
-                    MouthParameterGroup.TonguePose,
-                    MouthParameterGroup.SmileFrown
-                });
+                    MouthParameterGroup.LipRaise,
+                    MouthParameterGroup.LipHorizontal,
+                    MouthParameterGroup.SmileFrown,
+                    MouthParameterGroup.MouthPout,
+                    MouthParameterGroup.LipOverturn,
+                    MouthParameterGroup.LipStretchTighten,
+                    MouthParameterGroup.CheekPuffSuck,
+                ]);
             }
 
             public void UpdateInputs(float deltaTime)
             {
+                var focusedWorld = Engine.Current.WorldManager?.FocusedWorld;
 
-                var focus = Engine.Current.WorldManager?.FocusedWorld;
-                // If world is not available
-                if (focus != null)
+                if (focusedWorld != null)
                 {
-                    // Get or create lookup for world
-                    if (!VRCFTDictionary.TryGetValue(focus, out var lookup))
-                    {
-                        lookup = new();
-                        VRCFTDictionary[focus] = lookup;
-                    }
-
                     // user root if null
-                    if (focus.LocalUser.Root == null)
+                    if (focusedWorld.LocalUser.Root == null)
                     {
                         Warn("Root not Found");
                         return;
                     }
 
-                    lock (_etvr.Lock)
+                    if (_config!.GetValue(CreateDynVars))
                     {
-                        _etvrParameters.Clear();
-                        _etvrParameters.AddRange(_etvr.Parameters);
-                    }
-
-                    foreach (var oscParam in _etvrParameters)
-                    {
-                        if (!FaceTrackParams.TryGetValue(oscParam.Key, out var transformers))
-                            continue;
-
-                        foreach (var transformer in transformers)
+                        // Get or create lookup for world
+                        if (!Lookups.TryGetValue(focusedWorld, out var lookup))
                         {
-                            var param = transformer(oscParam.Value);
-                            if (!lookup.TryGetValue(param.Key, out var stream) || (stream != null && stream.IsRemoved))
+                            lookup = new();
+                            Lookups[focusedWorld] = lookup;
+                        }
+
+                        foreach (var kvp in _etvr!.Parameters)
+                        {
+                            if (!FaceTrackParams.Contains(kvp.Key))
+                                continue;
+
+                            if (!lookup.TryGetValue(kvp.Key, out var stream) || (stream != null && stream.IsRemoved))
                             {
-                                lookup[param.Key] = null;
-                                focus.RunInUpdates(0, () =>
+                                lookup[kvp.Key] = null;
+                                focusedWorld.RunInUpdates(0, () =>
                                 {
-                                    var s = CreateStream(focus, param.Key);
-                                    lookup[param.Key] = s;
+                                    var s = CreateStream(focusedWorld, kvp.Key);
+                                    s.Value = kvp.Value;
+                                    s.ForceUpdate();
+                                    lookup[kvp.Key] = s;
                                 });
                             }
+
                             if (stream != null)
                             {
-                                stream.Value = param.Value;
+                                stream.Value = kvp.Value;
                                 stream.ForceUpdate();
                             }
                         }
                     }
                 }
 
-                _eyes.CombinedEye.IsDeviceActive = Engine.Current.InputInterface.VR_Active;
-                _eyes.CombinedEye.IsTracking = _etvr.LastUpdate > DateTime.Now.AddSeconds(-5);
+                _eyes!.CombinedEye.IsDeviceActive = Engine.Current.InputInterface.VR_Active;
+                _eyes.CombinedEye.IsTracking = _etvr!.LastUpdate > DateTime.Now.AddSeconds(-5);
                 _eyes.CombinedEye.PupilDiameter = DefaultPupilSize;
 
                 _eyes.LeftEye.RawPosition = float3.Zero;
@@ -254,35 +246,57 @@ namespace EyeTrackVRResonite
 
                 CombineEyeData();
 
+                _eyes.LeftEye.InnerBrowVertical = Parameter("BrowExpressionLeft");
+                _eyes.LeftEye.OuterBrowVertical = Parameter("BrowExpressionLeft");
+                _eyes.RightEye.InnerBrowVertical = Parameter("BrowExpressionRight");
+                _eyes.RightEye.OuterBrowVertical = Parameter("BrowExpressionRight");
+
                 _eyes.ConvergenceDistance = 0f;
                 _eyes.Timestamp += deltaTime;
                 _eyes.FinishUpdate();
 
-                _mouth.IsTracking = _etvr.LastUpdate > DateTime.Now.AddSeconds(-5);
+                _mouth!.IsTracking = _etvr.LastUpdate > DateTime.Now.AddSeconds(-5);
                 _mouth.IsDeviceActive = Engine.Current.InputInterface.VR_Active;
 
-                var jawX = Parameter("JawRight") - Parameter("JawLeft");
-                _mouth.Jaw = new float3(Parameter("JawX"), 0, Parameter("JawForward"));
-                _mouth.JawOpen = Parameter("JawOpen");
-
-                var tongueX = Parameter("TongueRight") - Parameter("TongueLeft");
-                var tongueY = Parameter("TongueUp") - Parameter("TongueDown");
-                _mouth.Tongue = new float3(tongueX, tongueY, Parameter("TongueOut"));
+                _mouth.Jaw = new float3(Parameter("JawX"), -Parameter("MouthClosed"), 0);
+                _mouth.JawOpen = MathX.Clamp01(Parameter("JawOpen") - Parameter("MouthClosed"));
 
                 _mouth.MouthLeftSmileFrown = Parameter("SmileSadLeft");
                 _mouth.MouthRightSmileFrown = Parameter("SmileSadRight");
+
+                _mouth.CheekLeftPuffSuck = Parameter("CheekPuffLeft");
+                _mouth.CheekRightPuffSuck = Parameter("CheekPuffRight");
+
+                _mouth.LipLeftStretchTighten = Parameter("MouthStretchTightenLeft");
+                _mouth.LipRightStretchTighten = Parameter("MouthStretchTightenRight");
+
+                _mouth.MouthPoutLeft = Parameter("LipPucker");
+                _mouth.MouthPoutRight = Parameter("LipPucker");
+
+                _mouth.LipTopLeftOverturn = Parameter("LipFunnelUpper");
+                _mouth.LipTopRightOverturn = Parameter("LipFunnelUpper");
+                _mouth.LipBottomLeftOverturn = Parameter("LipFunnelLower");
+                _mouth.LipBottomRightOverturn = Parameter("LipFunnelLower");
+
+                _mouth.LipUpperLeftRaise = Parameter("MouthUpperUp");
+                _mouth.LipUpperRightRaise = Parameter("MouthUpperUp");
+
+                _mouth.LipLowerLeftRaise = Parameter("MouthLowerDown");
+                _mouth.LipLowerRightRaise = Parameter("MouthLowerDown");
+
+                _mouth.LipUpperHorizontal = Parameter("MouthX");
             }
 
             private float Parameter(string key)
             {
-                if (_etvr.Parameters.TryGetValue(key, out var val))
+                if (_etvr!.Parameters.TryGetValue(key, out var val))
                     return val;
                 return 0;
             }
 
             private void CombineEyeData()
             {
-                _eyes.IsEyeTrackingActive = _eyes.CombinedEye.IsTracking;
+                _eyes!.IsEyeTrackingActive = _eyes.CombinedEye.IsTracking;
                 _eyes.IsDeviceActive = _eyes.CombinedEye.IsDeviceActive;
                 _eyes.IsTracking = _eyes.CombinedEye.IsTracking;
 
@@ -311,20 +325,6 @@ namespace EyeTrackVRResonite
             private static Func<float, KeyValuePair<string, float>> MkParam(string key)
             {
                 return (float val) => new KeyValuePair<string, float>(key, val);
-            }
-
-            private static float3 Project2DTo3D(float2 v)
-            {
-                v *= MathX.Deg2Rad;
-
-                var pitch = v.x;
-                var yaw = v.y;
-
-                var x = MathX.Cos(yaw) * MathX.Cos(pitch);
-                var y = MathX.Sin(yaw) * -MathX.Cos(pitch);
-                var z = MathX.Sin(pitch);
-
-                return new float3(x, y, z);
             }
         }
     }
