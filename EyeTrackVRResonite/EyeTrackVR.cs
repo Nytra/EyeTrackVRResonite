@@ -11,7 +11,7 @@ namespace EyeTrackVRResonite
     {
         public override string Name => "EyeTrackVRResonite";
         public override string Author => "PLYSHKA + dfgHiatus + Nytra";
-        public override string Version => "3.0.0";
+        public override string Version => "3.0.1";
         public override string Link => "https://github.com/galister/EyeTrackVRResonite";
 
         public override void OnEngineInit()
