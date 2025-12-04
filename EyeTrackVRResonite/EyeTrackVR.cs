@@ -158,13 +158,7 @@ namespace EyeTrackVRResonite
                     MouthParameterGroup.JawPose,
                     MouthParameterGroup.JawOpen,
                     MouthParameterGroup.TonguePose,
-                    MouthParameterGroup.LipRaise,
-                    MouthParameterGroup.LipHorizontal,
-                    MouthParameterGroup.SmileFrown,
-                    MouthParameterGroup.MouthPout,
-                    MouthParameterGroup.LipOverturn,
-                    MouthParameterGroup.LipOverUnder,
-                    MouthParameterGroup.CheekPuffSuck
+                    MouthParameterGroup.SmileFrown
                 });
             }
 
